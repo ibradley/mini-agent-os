@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mini Agent OS — Design</title>
+<style>
+  :root {
+    --bg: #f7f8fa; --panel: #ffffff; --panel-2: #f1f3f7;
+    --ink: #14181f; --ink-2: #4a5260; --ink-3: #79828f;
+    --rule: #dfe3ea; --rule-strong: #c3cad6;
+    --dir: #0f7070; --dir-bg: #e2f2f1;
+    --flow: #1d5fa8; --flow-bg: #e6eefa;
+    --warn: #9a6500; --warn-bg: #fbf0d9;
+    --ok: #17794a; --ok-bg: #e0f2e7;
+    --crit: #b3261e; --crit-bg: #fbe6e4;
+    --routine: #a4700c; --routine-bg: #fbf1de;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e1116; --panel: #171b22; --panel-2: #1e242d;
+      --ink: #e8ecf2; --ink-2: #a8b2c1; --ink-3: #78838f;
+      --rule: #2a313b; --rule-strong: #3d4653;
+      --dir: #52c4bd; --dir-bg: #12302f;
+      --flow: #71a9ea; --flow-bg: #16273c;
+      --warn: #dfae53; --warn-bg: #332913;
+      --ok: #63c48d; --ok-bg: #143024;
+      --crit: #f0857c; --crit-bg: #391d1b;
+      --routine: #e0ad4d; --routine-bg: #332a15;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 44px 24px 90px; display: flex; flex-direction: column; gap: 44px; }
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .13em; text-transform: uppercase; color: var(--ink-3); }
+  h1 { font-size: clamp(26px, 4vw, 38px); line-height: 1.12; letter-spacing: -.02em; font-weight: 640; margin: 10px 0 12px; text-wrap: balance; }
+  .lede { max-width: 66ch; color: var(--ink-2); font-size: 16px; }
+  .lede b { color: var(--ink); }
+  .band { display: flex; flex-direction: column; gap: 16px; }
+  .band-head { display: flex; align-items: baseline; gap: 14px; padding-bottom: 9px; border-bottom: 1px solid var(--rule-strong); }
+  .band-head h2 { font-size: 18px; font-weight: 620; letter-spacing: -.01em; }
+  .band-head .note { font-size: 13px; color: var(--ink-3); margin-left: auto; text-align: right; }
+  code { font-family: var(--mono); font-size: .88em; background: var(--panel-2); border: 1px solid var(--rule); border-radius: 2px; padding: 1px 4px; }
+  .mantra { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+  .m-card { border-radius: 3px; padding: 16px 18px; border: 1px solid var(--rule); background: var(--panel); border-top: 3px solid var(--rule-strong); }
+  .m-card h3 { margin-bottom: 6px; font-size: 15.5px; font-weight: 640; }
+  .m-card p { font-size: 13.5px; color: var(--ink-2); }
+  .m-card.j { border-top-color: var(--flow); }
+  .m-card.w { border-top-color: var(--dir); }
+  .m-card.s { border-top-color: var(--warn); }
+  .treewrap { display: grid; grid-template-columns: minmax(0, 460px) minmax(0, 1fr); gap: 20px; align-items: start; }
+  @media (max-width: 820px) { .treewrap { grid-template-columns: minmax(0,1fr); } }
+  pre.tree { background: var(--panel); border: 1px solid var(--rule); border-radius: 3px; padding: 18px 20px; font-family: var(--mono); font-size: 12.5px; line-height: 1.75; overflow-x: auto; color: var(--ink-2); }
+  pre.tree b { color: var(--ink); font-weight: 640; }
+  pre.tree .d { color: var(--dir); font-weight: 640; }
+  pre.tree .c { color: var(--ink-3); }
+  .annos { display: flex; flex-direction: column; gap: 8px; }
+  .anno { display: grid; grid-template-columns: 150px minmax(0,1fr); gap: 12px; background: var(--panel); border: 1px solid var(--rule); border-radius: 2px; padding: 10px 13px; font-size: 13px; }
+  .anno .k { font-family: var(--mono); font-size: 12px; color: var(--dir); font-weight: 640; }
+  .anno .v { color: var(--ink-2); }
+  .anno .v b { color: var(--ink); font-weight: 600; }
+  .tablewrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 3px; }
+  table { border-collapse: collapse; width: 100%; min-width: 600px; background: var(--panel); }
+  th, td { text-align: left; padding: 9px 13px; border-bottom: 1px solid var(--rule); font-size: 13.5px; vertical-align: top; }
+  th { font-family: var(--mono); font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; background: var(--panel-2); }
+  tbody tr:last-child td { border-bottom: none; }
+  td.k { font-weight: 600; white-space: nowrap; }
+  td.no { color: var(--crit); }
+  .journey { display: flex; flex-direction: column; }
+  .j-row { display: grid; grid-template-columns: 30px minmax(0,1fr); gap: 14px; }
+  .j-dot { position: relative; }
+  .j-dot::before { content: ""; position: absolute; left: 8px; top: 0; bottom: 0; width: 2px; background: var(--rule-strong); }
+  .j-row:first-child .j-dot::before { top: 18px; }
+  .j-row:last-child .j-dot::before { bottom: auto; height: 18px; }
+  .j-dot::after { content: ""; position: absolute; left: 4px; top: 15px; width: 10px; height: 10px; border-radius: 50%; background: var(--bg); border: 2px solid var(--flow); }
+  .j-card { background: var(--panel); border: 1px solid var(--rule); border-radius: 2px; padding: 11px 14px; margin: 5px 0; font-size: 13.5px; color: var(--ink-2); }
+  .j-card b { color: var(--ink); font-weight: 620; }
+  .j-card .where { font-family: var(--mono); font-size: 11.5px; color: var(--dir); }
+  .routines { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+  .r-card { background: var(--panel); border: 1px solid var(--rule); border-left: 3px solid var(--routine); border-radius: 3px; padding: 14px 16px; }
+  .r-card h3 { margin-bottom: 4px; font-size: 15px; font-weight: 640; display: flex; gap: 10px; align-items: baseline; }
+  .r-card h3 .when { font-family: var(--mono); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--routine); background: var(--routine-bg); padding: 2px 7px; border-radius: 2px; font-weight: 600; }
+  .r-card p { font-size: 13.5px; color: var(--ink-2); }
+  .r-card p b { color: var(--ink); }
+  .rules { display: flex; flex-direction: column; gap: 8px; }
+  .rule-item { display: grid; grid-template-columns: 24px minmax(0,1fr); gap: 12px; background: var(--panel); border: 1px solid var(--rule); border-radius: 2px; padding: 12px 14px; font-size: 14px; color: var(--ink-2); }
+  .rule-item b { color: var(--ink); font-weight: 620; }
+  .rule-n { font-family: var(--mono); font-size: 12px; color: var(--ink-3); }
+  .install { background: var(--ok-bg); border: 1px solid var(--ok); border-radius: 3px; padding: 15px 18px; font-size: 14px; color: var(--ink); }
+  .install b { color: var(--ok); }
+  .install code { background: rgba(128,128,128,.13); border-color: transparent; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Mini Agent OS · design document</div>
+    <h1>One small operating system, any agent, any machine</h1>
+    <p class="lede">The same 15-file workspace lands on any machine you work from — a client laptop
+    running Copilot, a workstation running Claude Code or Codex, your own hardware. Self-contained,
+    single-domain, plain markdown. <b>It never phones home; you decide what leaves, and you carry
+    it by hand.</b></p>
+  </header>
+
+  <section class="band">
+    <div class="band-head"><h2>Three folders, three verbs</h2>
+      <span class="note">if you remember nothing else, remember this row</span></div>
+    <div class="mantra">
+      <div class="m-card j"><h3><code>journal/</code> — what happened</h3>
+        <p>Append-only, one file per day. Session summaries, meeting summaries, decisions.
+        The narrative — short enough to reread.</p></div>
+      <div class="m-card w"><h3><code>wiki/</code> — what we know</h3>
+        <p>Edited in place, few pages, linked. The current state of understanding.
+        When a source changes what you know, this is what gets updated.</p></div>
+      <div class="m-card s"><h3><code>wiki/sources/</code> — what was said</h3>
+        <p>Immutable, verbatim, dated. Raw transcripts and dropped documents.
+        Never edited, only referenced.</p></div>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="band-head"><h2>The tree</h2><span class="note">unzips as <code>~/work</code> · 15 files · reads as ordinary dev notes</span></div>
+    <div class="treewrap">
+      <pre class="tree">~/work/
+├── <b>AGENTS.md</b>              <span class="c">← Claude Code / Codex reads this</span>
+├── .github/
+│   └── <b>copilot-instructions.md</b>  <span class="c">← Copilot reads this</span>
+├── <span class="d">context/</span>
+│   ├── operating.md       <span class="c">write rules · routines · routing</span>
+│   └── playbooks/         <span class="c">your SOPs</span>
+├── <span class="d">journal/</span>
+│   └── 2026-09-06.md      <span class="c">## Session ## Meeting ## Decisions</span>
+├── <span class="d">projects/</span>&lt;slug&gt;/
+│   └── STATUS.md          <span class="c">state · ONE next action · resume</span>
+├── <span class="d">wiki/</span>
+│   ├── index.md · log.md · overview.md
+│   ├── sources/
+│   │   ├── transcripts/   <span class="c">raw transcripts, verbatim</span>
+│   │   └── docs/          <span class="c">dropped files worth keeping</span>
+│   └── inbox/             <span class="c">unfiled ideas · incoming briefs</span>
+├── <span class="d">skills/</span>
+│   └── session-log/SKILL.md
+├── <span class="d">outbox/</span>                <span class="c">export bundles staged for carry-out</span>
+└── <span class="d">state/</span>                 <span class="c">scratch, markers</span></pre>
+
+      <div class="annos">
+        <div class="anno"><span class="k">AGENTS.md +<br>copilot-instr.</span><span class="v">The <b>adapters</b> — the only harness-specific files.
+          Both are 4 lines pointing at <code>context/operating.md</code>. Swap agents, swap nothing else.</span></div>
+        <div class="anno"><span class="k">context/</span><span class="v">The constitution. Write rules (titles ≤80 chars as claims),
+          the what-goes-where table, and the three routines. <b>Every agent session loads this first.</b></span></div>
+        <div class="anno"><span class="k">projects/</span><span class="v">One dir per work thread. <code>STATUS.md</code> is deliberately tiny:
+          state, exactly one next action, a two-sentence resume note for picking it up cold.</span></div>
+        <div class="anno"><span class="k">skills/</span><span class="v">Portable capabilities in <code>SKILL.md</code> format — frontmatter plus
+          instructions any agent can follow. A skill written once runs under Copilot, Codex, or Claude.</span></div>
+        <div class="anno"><span class="k">outbox/</span><span class="v">The one door out. The shutdown routine writes
+          <code>export-YYYY-MM-DD.md</code> here; you carry it by hand. No daemons, no API keys, no sync software.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="band-head"><h2>Where does each thing live?</h2><span class="note">also baked into <code>operating.md</code>, so the agent enforces it</span></div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Thing</th><th>Lives in</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td class="k">Raw transcript</td><td><code>wiki/sources/transcripts/</code></td><td>immutable input — kept verbatim, never edited</td></tr>
+          <tr><td class="k">Meeting summary</td><td><code>journal/</code> under <code>## Meeting</code> (+ wiki page if durable)</td><td>the journal is the narrative, not the archive</td></tr>
+          <tr><td class="k">Session log</td><td><code>journal/</code> under <code>## Session</code></td><td>written by the session-log skill</td></tr>
+          <tr><td class="k">Decision</td><td><code>journal/</code> under <code>## Decisions</code></td><td>one line: claim + because-clause</td></tr>
+          <tr><td class="k">Idea, unfiled</td><td><code>wiki/inbox/</code></td><td>triaged at weekly consolidate</td></tr>
+          <tr><td class="k">Deliverable / code</td><td><code>projects/&lt;slug&gt;/</code></td><td>work product stays with its project</td></tr>
+          <tr><td class="k">Synthesis</td><td><code>wiki/</code> pages, edited in place</td><td>few, linked, current</td></tr>
+          <tr><td class="k no">Raw audio / video</td><td class="no">stays where recorded</td><td class="no">never enters the workspace</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="lede" style="font-size:14px">So the journal is <b>not</b> where transcripts go — it's where their
+    <i>summaries</i> go. A transcript lands verbatim in <code>sources/</code>; the agent digests it; the digest
+    becomes a <code>## Meeting</code> block in today's journal; and if it changed what you know, a wiki page
+    gets updated. Three layers, one motion.</p>
+  </section>
+
+  <section class="band">
+    <div class="band-head"><h2>Follow one transcript through</h2><span class="note">the same path every input takes</span></div>
+    <div class="journey">
+      <div class="j-row"><div class="j-dot"></div><div class="j-card"><b>1 · Drop.</b> Save the call transcript to
+        <span class="where">wiki/sources/transcripts/2026-09-06-pricing-review.md</span>. That's the only manual step.</div></div>
+      <div class="j-row"><div class="j-dot"></div><div class="j-card"><b>2 · Digest.</b> Ask the agent to process it (or it happens at shutdown):
+        summary + decisions + action items → <span class="where">journal/2026-09-06.md ## Meeting</span></div></div>
+      <div class="j-row"><div class="j-dot"></div><div class="j-card"><b>3 · Synthesize.</b> If it changed the state of play:
+        <span class="where">wiki/pricing-model.md</span> updated, <span class="where">wiki/index.md</span> + <span class="where">log.md</span> touched.</div></div>
+      <div class="j-row"><div class="j-dot"></div><div class="j-card"><b>4 · Export.</b> Shutdown bundles the journal entry + changed wiki pages
+        → <span class="where">outbox/export-2026-09-06.md</span>. You carry it out by hand.</div></div>
+      <div class="j-row"><div class="j-dot"></div><div class="j-card"><b>5 · Optional hub ingest.</b> If you keep a personal knowledge system
+        elsewhere, it ingests the bundle on its side — stamping its own metadata, merging wiki deltas, updating its
+        boards. The raw transcript never left the machine it was made on; only its distillation did.</div></div>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="band-head"><h2>The three routines</h2><span class="note">no cron, no background jobs — you trigger, the agent executes</span></div>
+    <div class="routines">
+      <div class="r-card"><h3>warmup <span class="when">day start</span></h3>
+        <p>Load <code>operating.md</code> + STATUS.md of today's projects + anything in <code>wiki/inbox/</code>.
+        <b>~30 seconds</b>, and the agent knows where you left off.</p></div>
+      <div class="r-card"><h3>shutdown <span class="when">day end</span></h3>
+        <p>Sessions → journal entry → wiki deltas → STATUS.md next-actions → export bundle →
+        <b>and it drafts your team standup from the same material.</b> The discipline pays for itself. ~2 min.</p></div>
+      <div class="r-card"><h3>consolidate <span class="when">weekly</span></h3>
+        <p>Wiki lint: merge duplicate pages, refresh the index, triage <code>inbox/</code>, flag stale claims.
+        Keeps the wiki small enough to stay true.</p></div>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="band-head"><h2>The confidentiality rules</h2><span class="note">what makes this safe on client and employer machines</span></div>
+    <div class="rules">
+      <div class="rule-item"><span class="rule-n">01</span><span><b>Nothing references the outside.</b> No external paths, no other client's name,
+        no personal credentials, no tooling beyond the editor and its agent.</span></div>
+      <div class="rule-item"><span class="rule-n">02</span><span><b>You are the transport.</b> No sync daemons, no API calls to personal services.
+        The export bundle moves when you move it, however the machine's rules allow.</span></div>
+      <div class="rule-item"><span class="rule-n">03</span><span><b>One domain per workspace.</b> Each machine's workspace knows only its own
+        client's work. Cross-client synthesis, if you do it at all, happens on your own hardware.</span></div>
+      <div class="rule-item"><span class="rule-n">04</span><span><b>It reads as dev hygiene.</b> A journal, a wiki, per-project status files, an
+        end-of-day summary that becomes your standup — a disciplined engineer's notes, because that's what it is.</span></div>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="band-head"><h2>Quick start</h2></div>
+    <div class="install">
+      <b>Direct:</b> <code>cp -r template ~/work && code ~/work</code> — Copilot picks up
+      <code>.github/copilot-instructions.md</code>; Claude Code / Codex read <code>AGENTS.md</code>. Say "run warmup."<br><br>
+      <b>Portable:</b> <code>python3 scripts/make_workspace.py --title "Acme DS" --zip</code> →
+      carry <code>dist/workspace-&lt;date&gt;.zip</code> to the target machine, unzip as <code>~/work</code>.<br><br>
+      First real test: drop one transcript in, run shutdown, and read the export bundle it produces.
+    </div>
+  </section>
+
+</div>
+</body>
+</html>
